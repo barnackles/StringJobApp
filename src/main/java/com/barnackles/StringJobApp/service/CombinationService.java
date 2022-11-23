@@ -32,14 +32,14 @@ public class CombinationService {
 
         int count = input.length;
 
-        // Traverse all possible lengths
+        // traverse all possible lengths
         for (int z = 0; z < maxLength - 1; z++)
         {
 
-            // Stores all combinations of length z
+            // stores all combinations of length z
             List<String> tmp = new ArrayList<>();
 
-            // Traverse the array
+            // traverse the array
             for (int i = 0; i < stringJobDto.getBaseCharacters().size(); i++)
             {
                 for (String s : input) {
@@ -73,7 +73,6 @@ public class CombinationService {
 
 
 
-
     public Long checkNumberOfUniqueStrings(StringJobDto stringJobDto) {
 
         return countDistinctCombinations(stringJobDto);
@@ -82,7 +81,6 @@ public class CombinationService {
 
 
         return (long) getListOfCombinations(stringJobDto).size();
-
 
 
     }

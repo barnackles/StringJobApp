@@ -32,4 +32,13 @@ public class StringJob {
     @OneToMany
     private List<GeneratedString> generatedString;
 
+    @Override
+    public String toString() {
+        return "StringJob{" +
+                "id=" + id +
+                ", requiredStringMinLength=" + requiredStringMinLength +
+                ", requiredStringMaxLength=" + requiredStringMaxLength +
+                ", numberOfStrings=" + numberOfStrings +
+                '}';
+    }
 }

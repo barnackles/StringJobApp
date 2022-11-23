@@ -7,7 +7,6 @@ import com.barnackles.StringJobApp.repository.GeneratedStringRepository;
 import com.barnackles.StringJobApp.repository.StringJobRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.logging.log4j.util.Strings;
 import org.springframework.stereotype.Service;
 
 import javax.transaction.Transactional;
@@ -26,18 +25,15 @@ public class GeneratedStringService {
 
     public void saveAll(List<String> listOfGeneratedStrings, StringJob stringJob) {
 
-        log.info("List Of Generated strings: {}", listOfGeneratedStrings);
         List<GeneratedString> generatedStringObjectList = new ArrayList<>();
 
-        for (String gs : listOfGeneratedStrings ) {
+        for (String gs : listOfGeneratedStrings) {
             GeneratedString generatedString = new GeneratedString();
             generatedString.setResult(gs);
             generatedString.setStringJob(stringJob);
 
             generatedStringObjectList.add(generatedString);
         }
-
-        log.info("List Of Generated object strings: {}", generatedStringObjectList);
 
         generatedStringRepository.saveAll(generatedStringObjectList);
         stringJob.setGeneratedString(generatedStringObjectList);

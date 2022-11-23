@@ -1,11 +1,12 @@
 package com.barnackles.StringJobApp.controller;
 
-import com.barnackles.StringJobApp.dto.StringJobDto;
 import com.barnackles.StringJobApp.dto.StatusResponseDto;
+import com.barnackles.StringJobApp.dto.StringJobDto;
 import com.barnackles.StringJobApp.model.StringJob;
 import com.barnackles.StringJobApp.service.CombinationService;
 import com.barnackles.StringJobApp.service.GeneratedStringService;
 import com.barnackles.StringJobApp.service.StringJobService;
+import com.barnackles.StringJobApp.task.Task;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
@@ -23,6 +24,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 
 @RestController
 @RequiredArgsConstructor
@@ -33,6 +36,8 @@ public class JobRestController {
     private final GeneratedStringService generatedStringService;
     private final StringJobService stringJobService;
 
+    ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(15);
+
 
     @PostMapping("/new")
     public ResponseEntity<String> newJob(@Valid @RequestBody StringJobDto stringJobDto) {
@@ -42,15 +47,15 @@ public class JobRestController {
 
         Long maxNumberOfUniqueStrings = combinationService.checkNumberOfUniqueStrings(stringJobDto);
 
-        if(stringJobDto.getRequiredStringMinLength() > stringJobDto.getRequiredStringMaxLength()) {
+        if (stringJobDto.getRequiredStringMinLength() > stringJobDto.getRequiredStringMaxLength()) {
 
             response = String.format("Minimum: %d value is grater than Maximum %d",
                     stringJobDto.getRequiredStringMinLength(), stringJobDto.getRequiredStringMaxLength());
             return new ResponseEntity<>(response, status);
         }
 
-        if(stringJobDto.getRequiredStringMaxLength() > stringJobDto.getBaseCharacters().size()
-        || stringJobDto.getRequiredStringMinLength() > stringJobDto.getBaseCharacters().size()) {
+        if (stringJobDto.getRequiredStringMaxLength() > stringJobDto.getBaseCharacters().size()
+                || stringJobDto.getRequiredStringMinLength() > stringJobDto.getBaseCharacters().size()) {
 
             response = ("String length cannot be greater than the number of the characters.");
 
@@ -58,29 +63,21 @@ public class JobRestController {
         }
 
 
-        if(maxNumberOfUniqueStrings < stringJobDto.getNumberOfStrings()) {
+        if (maxNumberOfUniqueStrings < stringJobDto.getNumberOfStrings()) {
 
             response = String.format("Maximum number of unique strings from given characters is: %d. You have requested: %d",
-                  maxNumberOfUniqueStrings, stringJobDto.getNumberOfStrings());
+                    maxNumberOfUniqueStrings, stringJobDto.getNumberOfStrings());
             return new ResponseEntity<>(response, status);
         }
 
 
-//        log.info("result is: {}", combinationService.getListOfCombinations(stringJobDto).toString());
-
-// in controller until running parallel
-        List<String> listOfGeneratedStrings = combinationService.getListOfCombinations(stringJobDto);
         Long stringJobId = stringJobService.saveJob(stringJobDto);
-        StringJob persistedStringJob = stringJobService.findById(stringJobId);
+        executor.execute(new Task(combinationService, stringJobService, generatedStringService, stringJobDto, stringJobId));
 
-        response = String.format("Job to create strings accepted: %s", persistedStringJob.toString());
-
-
-        generatedStringService.saveAll(listOfGeneratedStrings, persistedStringJob);
+        response = String.format("Job with id: %d - %s - has been accepted.", stringJobId, stringJobDto);
 
         return new ResponseEntity<>(response, HttpStatus.OK);
     }
-
 
 
     @GetMapping("/status")
@@ -88,12 +85,17 @@ public class JobRestController {
 
         StatusResponseDto statusResponseDto = new StatusResponseDto();
 
+        statusResponseDto.setActiveTasksCount(executor.getActiveCount());
+        statusResponseDto.setCompletedTaskCount(executor.getCompletedTaskCount());
+
         return new ResponseEntity<>(statusResponseDto, HttpStatus.OK);
+
     }
+
 
     @GetMapping(value = "/export/{jobId}", produces = "text/csv")
     public ResponseEntity<InputStreamResource> exportCSV(@Digits(integer = 10000, fraction = 0, message = "Must be a digit")
-                                                             @PathVariable String jobId) {
+                                                         @PathVariable String jobId) {
 
 
         CSVFormat csvFileFormat = CSVFormat.Builder.create().build();
@@ -134,7 +136,7 @@ public class JobRestController {
         return new ResponseEntity<>(fileInputStream, headers, HttpStatus.OK);
     }
 
-
+//   optionally to check model
 //    @GetMapping("/model")
 //    public ResponseEntity<StringJobDto> model() {
 //
