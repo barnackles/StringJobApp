@@ -13,5 +13,7 @@ public class GeneratedString {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     private String result;
+    @ManyToOne
+    private StringJob stringJob;
 
 }

@@ -1,54 +1,56 @@
 package com.barnackles.StringJobApp.controller;
 
-import com.barnackles.StringJobApp.dto.CreateNewJobDto;
-import com.barnackles.StringJobApp.dto.JobResponseDto;
+import com.barnackles.StringJobApp.dto.StringJobDto;
 import com.barnackles.StringJobApp.dto.StatusResponseDto;
-import com.barnackles.StringJobApp.service.JobService;
+import com.barnackles.StringJobApp.model.StringJob;
+import com.barnackles.StringJobApp.service.CombinationService;
+import com.barnackles.StringJobApp.service.GeneratedStringService;
+import com.barnackles.StringJobApp.service.StringJobService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
+import javax.validation.constraints.Digits;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
+@Slf4j
 public class JobRestController {
 
-    private final JobService jobService;
+    private final CombinationService combinationService;
+    private final GeneratedStringService generatedStringService;
+    private final StringJobService stringJobService;
 
 
     @PostMapping("/new")
-    public ResponseEntity<String> newJob(@Valid @RequestBody CreateNewJobDto createNewJobDto) {
+    public ResponseEntity<String> newJob(@Valid @RequestBody StringJobDto stringJobDto) {
 
-        String response = String.format("Job to create %d strings accepted.", createNewJobDto.getNumberOfStrings());
+        String response;
         HttpStatus status = HttpStatus.OK;
 
-        Long maxNumberOfUniqueStrings = jobService.checkNumberOfUniqueStrings(createNewJobDto);
+        Long maxNumberOfUniqueStrings = combinationService.checkNumberOfUniqueStrings(stringJobDto);
 
-        if(createNewJobDto.getRequiredStringMinLength() > createNewJobDto.getRequiredStringMaxLength()) {
+        if(stringJobDto.getRequiredStringMinLength() > stringJobDto.getRequiredStringMaxLength()) {
 
             response = String.format("Minimum: %d value is grater than Maximum %d",
-                    createNewJobDto.getRequiredStringMinLength(), createNewJobDto.getRequiredStringMaxLength());
+                    stringJobDto.getRequiredStringMinLength(), stringJobDto.getRequiredStringMaxLength());
             return new ResponseEntity<>(response, status);
         }
 
-        if(createNewJobDto.getRequiredStringMaxLength() > createNewJobDto.getBaseCharacters().size()
-        || createNewJobDto.getRequiredStringMinLength() > createNewJobDto.getBaseCharacters().size()) {
+        if(stringJobDto.getRequiredStringMaxLength() > stringJobDto.getBaseCharacters().size()
+        || stringJobDto.getRequiredStringMinLength() > stringJobDto.getBaseCharacters().size()) {
 
             response = ("String length cannot be greater than the number of the characters.");
 
@@ -56,12 +58,25 @@ public class JobRestController {
         }
 
 
-        if(maxNumberOfUniqueStrings < createNewJobDto.getNumberOfStrings()) {
+        if(maxNumberOfUniqueStrings < stringJobDto.getNumberOfStrings()) {
 
             response = String.format("Maximum number of unique strings from given characters is: %d. You have requested: %d",
-                  maxNumberOfUniqueStrings, createNewJobDto.getNumberOfStrings());
+                  maxNumberOfUniqueStrings, stringJobDto.getNumberOfStrings());
             return new ResponseEntity<>(response, status);
         }
+
+
+//        log.info("result is: {}", combinationService.getListOfCombinations(stringJobDto).toString());
+
+// in controller until running parallel
+        List<String> listOfGeneratedStrings = combinationService.getListOfCombinations(stringJobDto);
+        Long stringJobId = stringJobService.saveJob(stringJobDto);
+        StringJob persistedStringJob = stringJobService.findById(stringJobId);
+
+        response = String.format("Job to create strings accepted: %s", persistedStringJob.toString());
+
+
+        generatedStringService.saveAll(listOfGeneratedStrings, persistedStringJob);
 
         return new ResponseEntity<>(response, HttpStatus.OK);
     }
@@ -76,37 +91,28 @@ public class JobRestController {
         return new ResponseEntity<>(statusResponseDto, HttpStatus.OK);
     }
 
-    @GetMapping(value = "/exportResult", produces = "text/csv")
-    public ResponseEntity<InputStreamResource> exportCSV() {
-        // replace this with your header (if required)
-//        String[] csvHeader = {
-//                "Number", "String"
-//        };
+    @GetMapping(value = "/export/{jobId}", produces = "text/csv")
+    public ResponseEntity<InputStreamResource> exportCSV(@Digits(integer = 10000, fraction = 0, message = "Must be a digit")
+                                                             @PathVariable String jobId) {
+
+
         CSVFormat csvFileFormat = CSVFormat.Builder.create().build();
         csvFileFormat.builder().setHeader("NUmber", "String");
 
-
-        // replace this with your data retrieving logic
-        List<List<String>> csvBody = new ArrayList<>();
-        csvBody.add(Arrays.asList("1", "dupa"));
-        csvBody.add(Arrays.asList("2", "jeszcze jedna"));
+        StringJob readyJob = stringJobService.findById(Long.parseLong(jobId));
 
 
+        List<String> csvBody = generatedStringService.findAllGeneratedStringObjectsStrings(readyJob);
         ByteArrayInputStream byteArrayOutputStream;
-
-        // closing resources by using a try with resources
-        // https://www.baeldung.com/java-try-with-resources
         try (
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
-                // defining the CSV printer
 
                 CSVPrinter csvPrinter = new CSVPrinter(new PrintWriter(out), csvFileFormat);
         ) {
-            // populating the CSV content
-            for (List<String> record : csvBody)
+
+            for (String record : csvBody)
                 csvPrinter.printRecord(record);
 
-            // writing the underlying stream
             csvPrinter.flush();
 
             byteArrayOutputStream = new ByteArrayInputStream(out.toByteArray());
@@ -116,8 +122,8 @@ public class JobRestController {
 
         InputStreamResource fileInputStream = new InputStreamResource(byteArrayOutputStream);
 
-        // save by thr number of the job?
-        String csvFileName = "people.csv";
+        // save by the id of the job
+        String csvFileName = String.format("Strings_for_job_id_%s.csv", readyJob.getId());
 
         // setting HTTP headers
         HttpHeaders headers = new HttpHeaders();
@@ -127,6 +133,19 @@ public class JobRestController {
 
         return new ResponseEntity<>(fileInputStream, headers, HttpStatus.OK);
     }
+
+
+//    @GetMapping("/model")
+//    public ResponseEntity<StringJobDto> model() {
+//
+//        StringJobDto exampleStringJobDto = new StringJobDto();
+//        exampleStringJobDto.setRequiredStringMaxLength(1);
+//        exampleStringJobDto.setRequiredStringMinLength(2);
+//        exampleStringJobDto.setNumberOfStrings(2L);
+//        exampleStringJobDto.setBaseCharacters(Arrays.asList('a','b'));
+//
+//        return new ResponseEntity<>(exampleStringJobDto, HttpStatus.OK);
+//    }
 
 
 }

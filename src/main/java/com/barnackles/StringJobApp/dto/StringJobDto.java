@@ -4,9 +4,10 @@ import lombok.Data;
 
 import javax.validation.constraints.*;
 import java.util.List;
+import java.util.Set;
 
 @Data
-public class CreateNewJobDto {
+public class StringJobDto {
 
     @NotNull(message = "You have to provide a value.")
     @Min(value = 1, message = "You have to provide at least one character.")
